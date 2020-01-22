@@ -12,19 +12,28 @@ actions:
           instanceID: "{{ .Phases.createSnapshot.Output.instanceID }}"
           securityGroupID: "{{ .Phases.createSnapshot.Output.securityGroupID }}"
           backupID: "{{ .Phases.exportSnapshot.Output.backupID }}"
-    configMapNames:
-    - dbconfig
+    # configMapNames:
+    # - dbconfig
     phases:
     - func: CreateRDSSnapshot
       name: createSnapshot
+      objects:
+        dbconfig:
+          kind: ConfigMap
+          name: dbrdsconfig
+          namespace: "{{ .Namespace.Name }}"
       args:
-        instanceID: '{{ index .ConfigMaps.dbconfig.Data "postgres.instanceid" }}'
+        instanceID: '{{ index .Phases.createSnapshot.ConfigMaps.dbconfig.Data "postgres.instanceid" }}'
     - func: ExportRDSSnapshotToLocation
       name: exportSnapshot
       objects:
+        dbconfig:
+          kind: ConfigMap
+          name: dbrdsconfig
+          namespace: "{{ .Namespace.Name }}"
         dbsecret:
           kind: Secret
-          name: '{{ index .ConfigMaps.dbconfig.Data "postgres.secret" }}'
+          name: dbcreds
           namespace: "{{ .Namespace.Name }}"
       args:
         namespace: "{{ .Namespace.Name }}"
@@ -33,7 +42,7 @@ actions:
         username: '{{ index .Phases.exportSnapshot.Secrets.dbsecret.Data "username" | toString }}'
         password: '{{ index .Phases.exportSnapshot.Secrets.dbsecret.Data "password" | toString }}'
         dbEngine: "PostgreSQL"
-        databases: '{{ index .ConfigMaps.dbconfig.Data "postgres.databases" }}'
+        databases: '{{ index .Phases.exportSnapshot.ConfigMaps.dbconfig.Data "postgres.databases" }}'
         snapshotID: "{{ .Phases.createSnapshot.Output.snapshotID }}"
         backupArtifactPrefix: test-postgresql-instance/postgres
 
@@ -42,12 +51,12 @@ actions:
     - backupInfo
     kind: Namespace
     phases:
-    - func: RestoreRDSSnapshot 
+    - func: RestoreRDSSnapshot
       name: restoreSnapshots
       objects:
         dbsecret:
           kind: Secret
-          name: '{{ index .ConfigMaps.dbconfig.Data "postgres.secret" }}'
+          name: dbcreds
           namespace: "{{ .Namespace.Name }}"
       args:
         namespace: "{{ .Namespace.Name }}"
